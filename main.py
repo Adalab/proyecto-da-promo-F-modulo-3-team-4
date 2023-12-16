@@ -1,19 +1,45 @@
 #%%
+# Importaciones #
+#################
+
+# Importar librerías para manipulación y análisis de datos
+# -----------------------------------------------------------------------
 import pandas as pd
 import numpy as np
-from src import exploracion as e
-from src import transformacion as t
+
+# Importar librería para la conexión con MySQL
+# -----------------------------------------------------------------------
+import mysql.connector
+
+# Importar archivos para usa sus funciones
+# -----------------------------------------------------------------------
+from src import etl1_exploracion as e
+from src import etl2_transformacion as t
+from src import etl3_bbdd as b
+from src import queries_bbdd as q
+
+
+# Importar librerias para gestión de contraseñas y .env
+# -----------------------------------------------------------------------
+from dotenv import load_dotenv
+import os
+load_dotenv()
+
+
 pd.set_option('display.max_columns', None) # para poder visualizar todas las columnas de los DataFrames
 
 #%%
-# Exploración del dataframe
+# Exploración #
+###############
+
+#cargamos el csv y exploramos el dataframe
 df = e.exploracion_csv('data/HR_RAW_DATA.csv')
 
 #%%
-# Transformación del dataframe
+# Transformación #
+##################
 
-# Cambios nombres columnas dataframe
-
+# Cambio nombres columnas dataframe
 df = t.columnas_minusculas(df)
 
 dic_columnas = {"businesstravel": "business_travel",
@@ -162,5 +188,68 @@ for i in col_a_int:
 
 #%%
 # guardamos el csv
-df.to_csv("data/datos_py.csv")
+df.to_csv("data/datos_empleados.csv")
+
 # %%
+# Preparra datos para cargar #
+##############################
+
+# leemos el csv en un dataframe
+df_empleados = pd.read_csv(f'data/datos_empleados.csv', index_col=0)
+
+# creamos las distintas listas de tuplas para las tablas de la bbdd
+
+##Datos personales
+orden_datos_personales = ['employee_number', 'age', 'date_birth', 'gender', 'marital_status', 'distance_from_home', 'num_companies_worked', 'total_working_years', 'education', 'education_field']
+lista_tuplas_datos_personales = b.orden_df_tuplas(df_empleados, orden_datos_personales)
+lista_tuplas_datos_personales = b.convertir_float(lista_tuplas_datos_personales)
+
+##Valoraciones
+orden_valoraciones = ['employee_number', 'environment_satisfaction', 'job_involvement', 'job_satisfaction', 'performance_rating', 'relationship_satisfaction', 'work_life_balance', 'employee_number']
+lista_tuplas_valoraciones =  b.orden_df_tuplas(df_empleados, orden_valoraciones)
+lista_tuplas_valoraciones = b.convertir_float(lista_tuplas_valoraciones)
+
+##Salarios
+orden_salarios = ['employee_number', 'monthly_rate', 'percent_salary_hike', 'hourly_rate', 'daily_rate', 'monthly_income', 'employee_number']
+lista_tuplas_salarios = b.orden_df_tuplas(df_empleados, orden_salarios)
+lista_tuplas_salarios = b.convertir_float(lista_tuplas_salarios)
+
+##Gestión interna de la empresa
+orden_empresa = ['employee_number', 'attrition', 'business_travel', 'department', 'job_level', 'job_role', 'overtime', 'stock_option_level', 'training_times_last_year', 'years_at_company', 'years_since_last_promotion', 'years_with_curr_manager', 'remote_work', 'employee_number']
+lista_tuplas_empresa = b.orden_df_tuplas(df_empleados, orden_empresa)
+lista_tuplas_empresa = b.convertir_float(lista_tuplas_empresa)
+
+# Carga de datos a la BBDD #
+############################
+
+# Recuperamos la contraseña del .env
+contrasena = os.getenv('contrasena')
+
+## Crear la BBDD
+b.creacion_bbdd_tablas(q.query_creacion_bbdd, contrasena)
+
+## Crear la tabla datos personales
+b.creacion_bbdd_tablas(q.query_tabla_datos_personales, contrasena)
+
+## Crear la tabla gestión interna empresa
+b.creacion_bbdd_tablas(q.query_tabla_empresa, contrasena)
+
+## Crear la tabla salarios
+b.creacion_bbdd_tablas(q.query_tabla_salarios, contrasena)
+
+## Crear la tabla valoraciones
+b.creacion_bbdd_tablas(q.query_tabla_valoraciones, contrasena)
+
+# Insertar los datos
+
+## Insertar los datos personales
+b.insertar_datos(q.query_insertar_datos_personales, contrasena, "empleados", lista_tuplas_datos_personales)
+
+## Insertar los datos de gestión interna empresa
+b.insertar_datos(q.query_insertar_empresa, contrasena, "empleados", lista_tuplas_empresa)
+
+## Insertar los datos salarios
+b.insertar_datos(q.query_insertar_salarios, contrasena, "empleados", lista_tuplas_salarios)
+
+## Insertar los datos valoraciones
+b.insertar_datos(q.query_insertar_valoraciones, contrasena, "empleados", lista_tuplas_valoraciones)
